@@ -373,13 +373,19 @@ def pretrain(
 
         iteration = 0
         if args.do_train and args.train_iters > 0:
+            init_dt = datetime.now()
+            print_datetime('Initial training time')
             iteration, num_floating_point_operations_so_far = train(
                 forward_step_func,
                 model, optimizer, opt_param_scheduler,
                 train_data_iterator, valid_data_iterator,
                 process_non_loss_data_func, config, checkpointing_context,
                 non_loss_data_func)
-
+            print_datetime('Final Datetime')
+            final_dt = datetime.now()
+            print("Final training time: ", (final_dt-init_dt).total_seconds())
+            print("\nLast iteration: ", iteration)
+            print()
         print_datetime('after training is done')
 
         if args.save and iteration != 0 and iteration % args.save_interval != 0:
@@ -743,14 +749,21 @@ def train_step(forward_step_func, data_iterator,
     """Single training step."""
     args = get_args()
     timers = get_timers()
-
+    #if data_iterator:
+        #print("shape tokens", next(data_iterator)['tokens'].shape)
+        #print("shape labels", next(data_iterator)['labels'].shape)
     # Set grad to zero.
+    init_zero_grad = time.time()
+    init_date_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     for model_chunk in model:
         model_chunk.zero_grad_buffer()
+    #init_zero_grad = time.time()
     optimizer.zero_grad()
+    final_zero_grad = time.time() - init_zero_grad
 
     # Forward pass.
     forward_backward_func = get_forward_backward_func()
+    init_forw_back = time.time()
     losses_reduced = forward_backward_func(
         forward_step_func=forward_step_func,
         data_iterator=data_iterator,
@@ -760,6 +773,7 @@ def train_step(forward_step_func, data_iterator,
         micro_batch_size=args.micro_batch_size,
         decoder_seq_length=args.decoder_seq_length,
         forward_only=False)
+    final_forw_back = time.time() - init_forw_back
 
     # Empty unused memory.
     if args.empty_unused_memory_level >= 1:
@@ -772,8 +786,18 @@ def train_step(forward_step_func, data_iterator,
 
     # Update parameters.
     timers('optimizer', log_level=1).start(barrier=args.barrier_with_L1_time)
+    init_opt = time.time()
     update_successful, grad_norm, num_zeros_in_grad = optimizer.step()
+    final_opt = time.time() - init_opt 
     timers('optimizer').stop()
+    final_date_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    log_filename = "train_time_log.csv"
+    if not os.path.exists(log_filename):
+        with open(log_filename, "w") as f:  
+            f.write("num_microbatches,micro_batch_size,seq_length,init_datetime,final_datetime,zero_grad_time,forward_backward_time,optimizer_time,data_parallel_world_size,tensor_model_parallel_world_size,tensor_model_parallel_rank,pipeline_model_parallel_world_size,pipeline_model_parallel_rank\n")
+    with open(log_filename, "a") as f:
+        str_line = f"{get_num_microbatches()},{args.micro_batch_size},{args.seq_length},{init_date_time},{final_date_time},{final_zero_grad},{final_forw_back},{final_opt},{mpu.get_data_parallel_world_size()},{mpu.get_tensor_model_parallel_world_size()},{mpu.get_tensor_model_parallel_rank()},{mpu.get_pipeline_model_parallel_world_size()},{mpu.get_pipeline_model_parallel_rank()}\n"
+        f.write(str_line)
 
     # Vision momentum.
     if getattr(args, 'vision_pretraining', False) and args.vision_pretraining_type == "dino":
@@ -1307,7 +1331,7 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
 
     # Iterations.
     iteration = args.iteration
-
+    print("Initial Iteration: ", iteration,"\n")
     # Track E2E metrics at the start of training.
     one_logger_utils.on_train_start(iteration=iteration, consumed_train_samples=args.consumed_train_samples,
                                     train_samples=args.train_samples, seq_length=args.seq_length,

@@ -1,3 +1,4 @@
+
 # Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
 """Pretrain GPT."""
 
@@ -6,7 +7,7 @@ import torch
 from functools import partial
 from contextlib import nullcontext
 import inspect
-
+from datetime import datetime
 from typing import List, Optional, Tuple, Union
 from megatron.training import get_args
 from megatron.training import print_rank_0
@@ -204,6 +205,15 @@ def forward_step(data_iterator, model: GPTModel):
     with stimer:
         output_tensor = model(tokens, position_ids, attention_mask,
                               labels=labels)
+        #if not isinstance(tokens,torch.Tensor):
+           #print("out_tens\n", output_tensor)
+        str_shape = str(output_tensor.shape).replace("torch.Size(","").replace(")","")
+        if not os.path.exists("forward_info.csv"):
+           with open("forward_info.csv","w") as f:
+              f.write("tokens_out_shape\n")
+        with open("forward_info.csv","a") as f:
+           f.write(f"\"{str_shape}\"\n")
+
 
     return output_tensor, partial(loss_func, loss_mask)
 
@@ -274,7 +284,7 @@ if __name__ == "__main__":
 
     # Temporary for transition to core datasets
     train_valid_test_datasets_provider.is_distributed = True
-
+    init_dt = datetime.now()
     pretrain(
         train_valid_test_datasets_provider,
         model_provider,
@@ -282,3 +292,5 @@ if __name__ == "__main__":
         forward_step,
         args_defaults={'tokenizer_type': 'GPT2BPETokenizer'},
     )
+    final_dt = datetime.now()
+    print("Total finetuning time: ", (final_dt-init_dt).total_seconds())
