@@ -9,10 +9,12 @@ docker pull fabiotrindaderamos/megatron_llama
 git clone https://github.com/Fabio-Trindade/Megatron-LM.git
 ```
 
-3) Run and execute the container, replacing the path to the cloned repository:
+3) Run and execute the container, replacing the `</path/to/Megatron-LM/>` with the path of the cloned repository:
 ```
 docker run --shm-size=150g --gpus all --rm -d -v /path/to/Megatron-LM/:/workspace/Megatron-LM --network host --name train-llama --entrypoint sleep fabiotrindaderamos/megatron_llama infinity
+```
 
+```
 docker exec -it train-llama /bin/bash
 ```
 
